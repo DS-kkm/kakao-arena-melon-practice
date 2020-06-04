@@ -1,0 +1,11 @@
+name: arena
+channels:
+- default
+dependencies:
+  - python=3.7
+  - pip
+  - pip:
+      - fire
+      - jupyter
+      - numpy
+      - tqdm
