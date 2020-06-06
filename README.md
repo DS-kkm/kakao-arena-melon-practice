@@ -10,6 +10,8 @@ conda env create -f environment.yaml
 
 <br>
 
+## 실행
+
 ### (1) 데이터 분할
 ```shell script
 python split_data.py run res/train.json
