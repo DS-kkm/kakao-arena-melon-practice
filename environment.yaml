@@ -9,3 +9,6 @@ dependencies:
       - jupyter
       - numpy
       - tqdm
+      - pandas
+      - sklearn
+      - seaborn
