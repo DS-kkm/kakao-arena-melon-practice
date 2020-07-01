@@ -14,7 +14,7 @@ train = pd.read_json('../res/train.json',typ='frame')
 #사용자-노래 평점 데이터를 피벗테이블로 만들거임
 #평점은 좋아요횟수로 평가
 playlist_id_song = train.pivot(
-    Index='id',
+    index='id',
     columns='songs',
     values='like_cnt'
 )
