@@ -4,6 +4,7 @@
 #형식을 지정하지 않으면 가장 메모리를 많이 차지하는 방식으로 데이터를 불러오기 때문에
 #형식을 지정해서 데이터를 불러오면 메모리를 줄여 큰 데이터도 불러올 수 있습니다
 
+import pandas as pd
 
 def check_dtypes(file_path):
     print(file_path)

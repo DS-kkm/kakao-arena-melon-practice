@@ -38,12 +38,13 @@ playlist_1st = pd.merge(id_tags, id_like, on='id')
 #이대로 돌리면 데이터메모리가 너무 커서 memory error가 뜨므로 데이터 크기를 줄여준다.
 #함수 check_dtypes() 이용
 from _yujin import function_checkdtypes
-df = pd.get_dummies(playlist_1st,columns=['tag'])
+df = function_checkdtypes.check_dtypes(playlist_1st)
+df = pd.get_dummies(df,columns=['tag'])
 data_types = function_checkdtypes.check_dtypes(df)
 df = df.astype(data_types)
 print(df.head(50))
 
-id_score_mean = np.mean(df,axis=1) #사용자의 song개수 평균
+'''id_score_mean = np.mean(df,axis=1) #사용자의 song개수 평균
 matrix_id_mean = df - id_score_mean.reshape(-1,1) 
 pd.DataFrame(matrix_id_mean,columns=df.columns).head()
 
@@ -81,5 +82,5 @@ def recommend_song(svd_playlist,name_id,song,tag,num_recommendations=10):
     recommendations = recommendations.merge(pd.DataFrame(sorted_playlist).reset_index(),on='songs')
     #song개수 높은 순으로 정렬된 데이터와 합친다 (왜 합치지)
     recommendations = recommendations.rename(columns = {id_row_num:'Predictions'}).sort_values('Predictions',ascending=False)
-    return id_past, recommendations
+    return id_past, recommendations'''
 
