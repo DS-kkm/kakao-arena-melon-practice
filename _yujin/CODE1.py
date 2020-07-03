@@ -37,6 +37,7 @@ playlist_1st = pd.merge(id_tags, id_like, on='id')
 
 #이대로 돌리면 데이터메모리가 너무 커서 memory error가 뜨므로 데이터 크기를 줄여준다.
 #함수 check_dtypes() 이용
+from _yujin import function_checkdtypes
 df = pd.get_dummies(playlist_1st,columns=['tag'])
 data_types = check_dtypes(df)
 df = df.astype(data_types)
