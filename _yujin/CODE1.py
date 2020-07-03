@@ -39,7 +39,7 @@ playlist_1st = pd.merge(id_tags, id_like, on='id')
 #함수 check_dtypes() 이용
 from _yujin import function_checkdtypes
 df = pd.get_dummies(playlist_1st,columns=['tag'])
-data_types = check_dtypes(df)
+data_types = function_checkdtypes.check_dtypes(df)
 df = df.astype(data_types)
 print(df.head(50))
 
