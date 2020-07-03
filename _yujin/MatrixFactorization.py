@@ -3,18 +3,17 @@ import os
 import re
 import numpy as np
 import pandas as pd
+import scipy
 
-#<사용자-노래 평점 데이터>와 <노래 정보 데이터>를 이용해 matrix를 만들어 matrix factorization을 할 것입니다.
-#<사용자-노래 평점 데이터>는 train.json을 활용하고,
-#<노래 정보 데이터>는 song_meta.json을 활용할 예정입니다.
-#장르데이터는 song_meta.json에 포함되어 있으므로 별도로 이용하지는 않겠습니다.(일단은!)
+#song_meta data와 train data를 이용해 matrix를 만들어 matrix factorization을 할 것입니다.
+#장르데이터는 song_meta.json에 포함되어 있으므로 별도로 이용하지는 않겠습니다.
 song_meta = pd.read_json('../res/song_meta.json',typ='frame')
 train = pd.read_json('../res/train.json',typ='frame')
 
-#사용자-노래 평점 데이터를 피벗테이블로 만들거임
-#평점은 좋아요횟수로 평가
+#좋아요횟수 이용
+#피벗테이블 형성 >> 에러
 playlist_id_song = train.pivot(
-    Index='id',
+    index='id',
     columns='songs',
     values='like_cnt'
 )
