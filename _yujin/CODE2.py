@@ -29,6 +29,7 @@ item_user_data = train_data[['id','tags','song_len']]
 userid = train_data['id']
 songid = song_meta['id']
 
+#print(songid)
 #implicit 패키지 이용
 import implicit
 
