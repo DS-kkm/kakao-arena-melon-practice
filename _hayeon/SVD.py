@@ -74,6 +74,18 @@ table2 = pd.DataFrame(table2)
 table2.columns = table.columns
 table2.index = table.index
 
+# test data의 tags & songs 공백인 행 추출하여 각각 데이터프레임 생성
+test_tags_pred = test.loc[[0]]
+for i in range(0, len(test)):
+if len(test.tags[i])==0:
+    test_tags_pred = pd.concat([test_tags_pred,test.loc[[i]]])
+
+test_songs_pred = test.loc[[5]]
+for i in range(0, len(test)):
+if len(test.songs[i])==0:
+    test_songs_pred = pd.concat([test_songs_pred,test.loc[[i]]])
+
 ##### Modeling
 def recommendation():
+    test_tags_pred.tags
 return
