@@ -54,6 +54,7 @@ import math to math
 S_prop_qt = np.arange(len(S_prop))
 for i in range(0, len(S_prop)):
     S_prop_qt[i] = math.isclose(S_prop[i] , np.percentile(S_prop, 90))
+qt_index = np.where(S_prop_qt == 1)
 
 table2 = np.dot(np.dot(U, S_diag), VT)
 table2 = pd.DataFrame(table2)
