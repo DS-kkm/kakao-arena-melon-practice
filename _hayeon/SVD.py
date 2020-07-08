@@ -56,6 +56,14 @@ for i in range(0, len(S_prop)):
     S_prop_qt[i] = math.isclose(S_prop[i] , np.percentile(S_prop, 90))
 qt_index = np.where(S_prop_qt == 1)
 
+# 3. demical 사용
+from decimal import Decimal
+S_prop_qt = np.arange(len(S_prop))
+for i in range(0, len(S_prop)):
+    if Decimal(S_prop[i]) == Decimal(np.percentile(S_prop, 90)):
+       S_prop_qt[i] = 1
+qt_index = np.where(S_prop_qt == 1)
+
 table2 = np.dot(np.dot(U, S_diag), VT)
 table2 = pd.DataFrame(table2)
 
@@ -75,11 +83,12 @@ if len(val.songs[i])==0:
 
 ##### Modeling
 def recommendation(train,train_pred):
-    songs_index = pd.DataFrame(index=range(0, len(train)), columns=[])
+    songs = pd.DataFrame(index=range(0, len(train)), columns=['songs'])
     # 태그를 기반으로 songs 예측하기
     for i in range(0, len(train_pred)):
         for j in  range(0, len(train)):
-            train_pred.index[i] == train.tags[j]
+            if train_pred.index[i] == train.tags[j]:
+               songs = train.loc[i][0:qt_index]
 
 
 
@@ -87,4 +96,3 @@ def recommendation(train,train_pred):
 # 그 태그의 songs의 목록을 추출하고
 # 그 중에 없는 songs을 추출
 
-return
