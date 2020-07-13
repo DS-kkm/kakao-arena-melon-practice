@@ -3,42 +3,98 @@ import os
 import re
 import numpy as np
 import pandas as pd
+from scipy import sparse
+from scipy.stats import uniform
+from tqdm import tqdm
 
-#내가 하고 싶은 것
-#1) train데이터에서 id,tags,songs만 추출
-#songs는 song의 개수로 치환
-#2) id가 선호하는(song개수가 높은) tags의 다른 곡들 중 듣지 않았던 곡을 추천
 song_meta = pd.read_json('../res/song_meta.json',encoding='utf-8')
-train_data = pd.read_json('../res/train.json',encoding='utf-8')
+Train_data = pd.read_json('../res/train.json',encoding='utf-8')
+train_data = Train_data.sample(frac=0.30)
 
-#song_meta에서 써야하는 데이터는 없나?
-#train_data에서 태그를 분해? >> column이 너무 많아지는 문제는 어떻게...
-#train_data[[id,tags,song개수]]
-#      tag1 tag2 ...
-# id1  곡수 곡수 ...
-#이런 행렬을 만들 계획인데 ...
+song_list = song_meta[['id']]
+id_list = train_data[['id']]
 
-#song의 개수만 따로 새로운 song_len으로 데이터프레임에 추가
-alist = [len(i) for i in train_data["songs"]]
-train_data["song_len"] = alist
-#print(train_data.head())
+#song이 그 플레이리스트에 존재하면 1, 존재하지 않으면 0 부여하는 데이터리스트 생성
+song_meta_ = song_meta['id'].tolist()
+songs = [i for i in train_data['songs']]
+id_train_ = [i for i in train_data['id']]
 
-#train데이터에서 id,tags,song_len만 추출
-item_user_data = train_data[['id','tags','song_len']]
-#id만 따로 추출
-userid = train_data['id']
-songid = song_meta['id']
+dic = {}
+for idx, row in tqdm(train_data.iterrows(), total=len(train_data)):
+    # print(row.id, row.songs) # row["id"], row["songs"]
+    dic[row.id] = row.songs
 
-#print(songid)
-#implicit 패키지 이용
+id_songs = (
+    train_data[['id', 'songs']]
+    .explode('songs')
+    .assign(value=1)
+    .rename(columns={'id':'user_id', 'songs':'item_id'})
+)
+
+# range of int32
+assert id_songs['user_id'].max() < 2147483647
+assert id_songs['item_id'].max() < 2147483647
+
+id_songs['user_id'] = id_songs['user_id'].astype(np.int32)
+id_songs['item_id'] = id_songs['item_id'].astype(np.int32)
+id_songs['value'] = id_songs['value'].astype(np.int8)
+
+#행렬이 너무 커서 빈도수 적은 요인들 제거
+id_songs.user_id.nunique() * id_songs.item_id.nunique()
+
+while True:
+    prev = len(id_songs)
+
+    # 5곡 이상 가진 플레이 리스트만
+    user_count = id_songs.user_id.value_counts()
+    id_songs = id_songs[id_songs.user_id.isin(user_count[user_count >= 5].index)]
+
+    # 5번 이상 등장한 곡들만
+    item_count = id_songs.item_id.value_counts()
+    id_songs = id_songs[id_songs.item_id.isin(item_count[item_count >= 5].index)]
+
+    cur = len(id_songs)
+
+    if prev == cur: break
+
+    print("제거 데이터 수: ", prev - cur)
+
+id_songs.user_id.nunique() * id_songs.item_id.nunique() #10%정도로 감소함
+
+from scipy.sparse import csr_matrix
+from pandas.api.types import CategoricalDtype
+
+person_c = CategoricalDtype(sorted(id_songs.user_id.unique()), ordered=True)
+thing_c = CategoricalDtype(sorted(id_songs.item_id.unique()), ordered=True)
+
+row = id_songs.user_id.astype(person_c).cat.codes
+col = id_songs.item_id.astype(thing_c).cat.codes
+sparse_matrix = csr_matrix((id_songs["value"], (row, col)), \
+                           shape=(person_c.categories.size, thing_c.categories.size))
+
+print(sparse_matrix)
+
 import implicit
 
-#initialize a model
-playlist = implicit.als.AlternatingLeastSquares(factors=50)
-#train the model on a sparse matrix of data
-playlist.fit(item_user_data)
-#recommend items for a user
-user_playlist = item_user_data.T.tocsr()
-recommendations = playlist.recommend(userid, user_playlist)
-#find related items
-related = playlist.similar_items(songid)
+# initialize a model
+model = implicit.als.AlternatingLeastSquares(factors=50)
+
+# train the model on a sparse matrix of item/user/confidence weights
+model.fit(sparse_matrix.T)
+
+# recommend items for a user
+user_items = sparse_matrix.tocsr()
+
+# 인기곡
+top_songs = id_songs.item_id.value_counts().nlargest(10)
+print(top_songs)
+
+item_index = np.where(thing_c.categories==top_songs.index[0])
+
+# find related items
+related = model.similar_items(item_index[0][0])
+
+print(related)
+
+print(song_meta[song_meta.id==top_songs.index[0]])
+print(song_meta[song_meta.id==thing_c.categories[related[5][0]]])
