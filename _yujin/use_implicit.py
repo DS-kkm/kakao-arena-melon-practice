@@ -5,59 +5,96 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 from scipy.stats import uniform
+from tqdm import tqdm
 
 song_meta = pd.read_json('../res/song_meta.json',encoding='utf-8')
-train_data = pd.read_json('../res/train.json',encoding='utf-8')
+Train_data = pd.read_json('../res/train.json',encoding='utf-8')
+train_data = Train_data.sample(frac=0.30)
 
 song_list = song_meta[['id']]
 id_list = train_data[['id']]
 
 #song이 그 플레이리스트에 존재하면 1, 존재하지 않으면 0 부여하는 데이터리스트 생성
-song_meta_ = [i for i in song_meta['id']]
-song_meta_list = []
-for i in song_meta_:
-    song_meta_list.append(i)
-
+song_meta_ = song_meta['id'].tolist()
 songs = [i for i in train_data['songs']]
-songs_list = []
-for i in songs:
-    songs_list.append(i)
 id_train_ = [i for i in train_data['id']]
-id_train_list = []
-for i in id_train_:
-    id_train_list.append(i)
-dict = {}
-for i in id_train_list:
-    for j in songs_list:
-        dict[i] = j
 
-data_list = []
-for i in song_meta_list:
-    for j in id_train_list:
-        if song_meta_list[i] in dict[j]:
-            data_list.append(1)
-        else: data_list.append(0)
+dic = {}
+for idx, row in tqdm(train_data.iterrows(), total=len(train_data)):
+    # print(row.id, row.songs) # row["id"], row["songs"]
+    dic[row.id] = row.songs
 
+id_songs = (
+    train_data[['id', 'songs']]
+    .explode('songs')
+    .assign(value=1)
+    .rename(columns={'id':'user_id', 'songs':'item_id'})
+)
 
-row_ind = np.array(id_list)
-col_ind = np.array(song_list)
-data = np.array(data_list)
-matrix_playlist = sparse.coo_matrix((data,(row_ind,col_ind)))
-print(matrix_playlist)
+# range of int32
+assert id_songs['user_id'].max() < 2147483647
+assert id_songs['item_id'].max() < 2147483647
 
-#플레이리스트id와 song id만 따로 추출
-userid = train_data['id']
-songid = song_meta['id']
+id_songs['user_id'] = id_songs['user_id'].astype(np.int32)
+id_songs['item_id'] = id_songs['item_id'].astype(np.int32)
+id_songs['value'] = id_songs['value'].astype(np.int8)
 
-#implicit 패키지 이용
+#행렬이 너무 커서 빈도수 적은 요인들 제거
+id_songs.user_id.nunique() * id_songs.item_id.nunique()
+
+while True:
+    prev = len(id_songs)
+
+    # 5곡 이상 가진 플레이 리스트만
+    user_count = id_songs.user_id.value_counts()
+    id_songs = id_songs[id_songs.user_id.isin(user_count[user_count >= 5].index)]
+
+    # 5번 이상 등장한 곡들만
+    item_count = id_songs.item_id.value_counts()
+    id_songs = id_songs[id_songs.item_id.isin(item_count[item_count >= 5].index)]
+
+    cur = len(id_songs)
+
+    if prev == cur: break
+
+    print("제거 데이터 수: ", prev - cur)
+
+id_songs.user_id.nunique() * id_songs.item_id.nunique() #10%정도로 감소함
+
+from scipy.sparse import csr_matrix
+from pandas.api.types import CategoricalDtype
+
+person_c = CategoricalDtype(sorted(id_songs.user_id.unique()), ordered=True)
+thing_c = CategoricalDtype(sorted(id_songs.item_id.unique()), ordered=True)
+
+row = id_songs.user_id.astype(person_c).cat.codes
+col = id_songs.item_id.astype(thing_c).cat.codes
+sparse_matrix = csr_matrix((id_songs["value"], (row, col)), \
+                           shape=(person_c.categories.size, thing_c.categories.size))
+
+print(sparse_matrix)
+
 import implicit
 
-#initialize a model
-playlist = implicit.als.AlternatingLeastSquares(factors=50)
-#train the model on a sparse matrix of data
-playlist.fit(matrix_playlist)
-#recommend items for a user
-user_playlist = matrix_playlist.T.tocsr()
-recommendations = playlist.recommend(userid, user_playlist)
-#find related items
-related = playlist.similar_items(songid)
+# initialize a model
+model = implicit.als.AlternatingLeastSquares(factors=50)
+
+# train the model on a sparse matrix of item/user/confidence weights
+model.fit(sparse_matrix.T)
+
+# recommend items for a user
+user_items = sparse_matrix.tocsr()
+
+# 인기곡
+top_songs = id_songs.item_id.value_counts().nlargest(10)
+print(top_songs)
+
+item_index = np.where(thing_c.categories==top_songs.index[0])
+
+# find related items
+related = model.similar_items(item_index[0][0])
+
+print(related)
+
+print(song_meta[song_meta.id==top_songs.index[0]])
+print(song_meta[song_meta.id==thing_c.categories[related[5][0]]])
