@@ -18,9 +18,10 @@ train_songs_map = pd.DataFrame(data = train_songs_unnest[0], columns = train_son
 train_songs_map['id'] = train_songs_map['id'].astype(str)
 train_songs_map['songs'] = train_songs_map['songs'].astype(str)
 
-train_songs_map_sp = train_songs_map.loc[0:9999]
+train_songs_map_sp = train_songs_map.loc[0:len(train_songs_map)*0.00005]
 table = pd.crosstab(train_songs_map_sp.id, train_songs_map_sp.songs)
-table = pd.DataFrame(table)
+table = table.reset_index()
+table = table.drop('id',axis=1)
 
 # Association Rule Analysis
 from mlxtend.frequent_patterns import apriori
@@ -33,9 +34,17 @@ def encode_units(x):
         return 1
 
 table_sets = table.applymap(encode_units)
-table_sets.drop('POSTAGE', inplace=True, axis=1)
-
-frequent_itemsets = apriori(table, min_support=0.07, use_colnames=False)
+print(table_sets.shape)
+frequent_itemsets = apriori(table_sets, min_support=0.1, use_colnames=True)
 
 rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1)
+rules = rules.sort_values(['confidence', 'lift'], ascending =[False, False])
+print(rules.head())
+
+######
+df_sets = df.applymap(encode_units)
+frequent_itemsets = apriori(df_sets, min_support=0.05, use_colnames=True)
+rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1)
 rules.head()
+rules
+
