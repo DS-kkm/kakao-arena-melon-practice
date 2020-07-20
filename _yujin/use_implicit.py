@@ -110,3 +110,21 @@ a = cos_sim(id_songs.user_id,val_vec)
 train_val = train_val.append(a)
 
 print(train_val)
+
+#################################################################################
+
+val_vec = (
+    val_data[['id', 'songs']]
+    .explode('songs')
+    .assign(value=1)
+    .rename(columns={'id':'user_id', 'songs':'item_id'})
+)
+
+def cos_sim(A, B):
+    return dot(A, B) / (norm(A) * norm(B))
+
+train_val = []
+a = cos_sim(id_songs.user_id,val_vec.user_id)
+train_val = train_val.append(a)
+
+print(train_val)
