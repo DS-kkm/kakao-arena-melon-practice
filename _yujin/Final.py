@@ -3,15 +3,13 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from tqdm import tqdm
-from scipy.sparse import coo_matrix
-from arena_util import write_json, remove_seen
+from arena_util import write_json
 from scipy.sparse import csr_matrix
 from pandas.api.types import CategoricalDtype
 
 
 class Recommend:
     def run(self, train_data, question_data):
-        song_meta = pd.read_json('./res/song_meta.json', encoding='utf-8')
 
         print("Loading train file...")
         train_data = pd.read_json('./arena_data/orig/train.json', encoding='utf-8')
@@ -25,78 +23,138 @@ class Recommend:
         print("Writing answers...")
         write_json(answers, 'results/results.json')
 
-    def related(self,song_meta,train_data,question_data):
-        _, song_mp = self.related_song(question_data)
-        _, tag_mp = self.related_tag(train_data,100)
-
-        def related_song(question_data):
-            song_list = song_meta[['id']]
-            id_list = train_data[['id']]
-
-            song_meta_ = song_meta['id'].tolist()
-            songs = [i for i in train_data['songs']]
-            id_train_ = [i for i in train_data['id']]
-            recommend_song = question_data['songs'].tolist()
-
-            dic = {}
-            for idx, row in tqdm(train_data.iterrows(), total=len(train_data)):
-                dic[row.id] = row.songs
-
-            id_songs = (
-                train_data[['id', 'songs']]
-                    .explode('songs')
-                    .assign(value=1)
-                    .rename(columns={'id': 'user_id', 'songs': 'item_id'})
+    def related(self,question_data):
+        id_songs = (
+            train_data[['id', 'songs']]
+           .explode('songs')
+           .assign(value=1)
+           .rename(columns={'id': 'user_id', 'songs': 'item_id'})
             )
 
-            assert id_songs['user_id'].max() < 2147483647
-            assert id_songs['item_id'].max() < 2147483647
+        id_tags = (
+            train_data[['id', 'tags']]
+                .explode('tags')
+                .assign(value=1)
+                .rename(columns={'id': 'user_id', 'tags': 'tag'})
+        )
 
-            id_songs['user_id'] = id_songs['user_id'].astype(np.int32)
-            id_songs['item_id'] = id_songs['item_id'].astype(np.int32)
-            id_songs['value'] = id_songs['value'].astype(np.int8)
+        assert id_songs['user_id'].max() < 2147483647
+        assert id_songs['item_id'].max() < 2147483647
+        assert id_tags['user_id'].max() < 2147483647
+        assert id_tags['tag'].max() < 2147483647
 
-            # 행렬이 너무 커서 빈도수 적은 요인들 제거
-            id_songs.user_id.nunique() * id_songs.item_id.nunique()
+        id_songs['user_id'] = id_songs['user_id'].astype(np.int32)
+        id_songs['item_id'] = id_songs['item_id'].astype(np.int32)
+        id_songs['value'] = id_songs['value'].astype(np.int8)
+        id_tags['user_id'] = id_tags['user_id'].astype(np.int32)
+        id_tags['tag'] = id_tags['tag'].astype(np.int32)
+        id_tags['value'] = id_tags['value'].astype(np.int8)
 
-            while True:
-                prev = len(id_songs)
+        while True:
+            prev = len(id_songs)
 
-                # 5곡 이상 가진 플레이 리스트만
-                user_count = id_songs.user_id.value_counts()
-                id_songs = id_songs[id_songs.user_id.isin(user_count[user_count >= 5].index)]
+            # 5곡 이상 가진 플레이 리스트만
+            user_count = id_songs.user_id.value_counts()
+            id_songs = id_songs[id_songs.user_id.isin(user_count[user_count >= 5].index)]
 
-                # 5번 이상 등장한 곡들만
-                item_count = id_songs.item_id.value_counts()
-                id_songs = id_songs[id_songs.item_id.isin(item_count[item_count >= 5].index)]
+            # 5번 이상 등장한 곡들만
+            item_count = id_songs.item_id.value_counts()
+            id_songs = id_songs[id_songs.item_id.isin(item_count[item_count >= 5].index)]
 
-                cur = len(id_songs)
+            cur = len(id_songs)
 
-                if prev == cur: break
+            if prev == cur: break
 
-            id_songs.user_id.nunique() * id_songs.item_id.nunique()  # 10%정도로 감소함
+        while True:
+            prev = len(id_tags)
 
-            person_c = CategoricalDtype(sorted(id_songs.user_id.unique()), ordered=True)
-            thing_c = CategoricalDtype(sorted(id_songs.item_id.unique()), ordered=True)
+            # 5태그 이상 가진 플레이 리스트만
+            user_count = id_tags.user_id.value_counts()
+            id_tags = id_tags[id_tags.user_id.isin(user_count[user_count >= 5].index)]
 
-            row = id_songs.user_id.astype(person_c).cat.codes
-            col = id_songs.item_id.astype(thing_c).cat.codes
-            sparse_matrix = csr_matrix((id_songs["value"], (row, col)), \
-                                       shape=(person_c.categories.size, thing_c.categories.size))
+            # 5번 이상 등장한 태그들만
+            tag_count = id_tags.tag.value_counts()
+            id_tags = id_tags[id_tags.tag.isin(tag_count[tag_count >= 5].index)]
 
-            import implicit
+            cur = len(id_tags)
 
-            # initialize a model
-            model = implicit.als.AlternatingLeastSquares(factors=50)
+            if prev == cur: break
 
-            # train the model on a sparse matrix of item/user/confidence weights
-            model.fit(sparse_matrix.T)
+        person_c_item = CategoricalDtype(sorted(id_songs.user_id.unique()), ordered=True)
+        thing_c_item = CategoricalDtype(sorted(id_songs.item_id.unique()), ordered=True)
+        person_c_tag = CategoricalDtype(sorted(id_tags.user_id.unique()), ordered=True)
+        thing_c_tag = CategoricalDtype(sorted(id_tags.tag.unique()), ordered=True)
 
-            # recommend items for a user
-            user_items = sparse_matrix.tocsr()
+        row_item = id_songs.user_id.astype(person_c_item).cat.codes
+        col_item = id_songs.item_id.astype(thing_c_item).cat.codes
+        item_matrix = csr_matrix((id_songs["value"], (row_item, col_item)), \
+                                   shape=(person_c_item.categories.size, thing_c_item.categories.size))
 
-            # find related items
-            related = model.similar_items(recommend_song[])
+        row_tag = id_tags.user_id.astype(person_c_tag).cat.codes
+        col_tag = id_tags.tag.astype(thing_c_tag).cat.codes
+        tag_matrix = csr_matrix((id_tags["value"], (row_tag, col_tag)), \
+                                shape=(person_c_tag.categories.size, thing_c_tag.categories.size))
 
+        import implicit
 
+        # initialize a model
+        item_model = implicit.als.AlternatingLeastSquares(factors=50)
+        tag_model = implicit.als.AlternatingLeastSquares(factors=50)
 
+        # train the model on a sparse matrix of item/user/confidence weights
+        item_model.fit(item_matrix.T)
+        tag_model.fit(tag_matrix.T)
+
+        # recommend items for a user
+        user_items = item_matrix.tocsr()
+        user_tags = tag_matrix.tocsr()
+
+        question_item = (
+            question_data[['id', 'songs']]
+            .explode('songs')
+            .assign(value=1)
+            .rename(columns={'id': 'user_id', 'songs': 'item_id'})
+            )
+        question_tag = (
+            question_data[['id', 'tags']]
+            .explode('tags')
+            .assign(value=1)
+            .rename(columns={'id': 'user_id', 'tags': 'tag'})
+            )
+
+        dic_item = {}
+        for idx, row in tqdm(question_data.iterrows(), total=len(question_data)):
+            dic_item[row.id] = row.songs
+        dic_tag = {}
+        for idx, row in tqdm(question_data.iterrows(), total=len(question_data)):
+            dic_tag[row.id] = row.tags
+
+        set_question_item = set(question_item.user_id)
+        ls_question_item = list(set_question_item)
+        set_question_tag = set(question_tag.user_id)
+        ls_question_tag = list(set_question_tag)
+
+        related = []
+        for i in range(len(ls_question_item)):
+            for j in range(len(dic_item[ls_question_item[i]])):
+                rel = item_model.similar_items(dic_item[ls_question_item[i]][j])
+                related.append(rel)
+
+        tag_related = []
+        for i in range(len(ls_question_tag)):
+            for j in range(len(dic_tag[ls_question_tag[i]])):
+                rel = tag_model.similar_items(dic_tag[ls_question_tag[i]][j])
+                related.append(rel)
+
+        answer = []
+        for i in range(len(ls_question_item)):
+            answer.append({
+                "id": ls_question_item[i],
+                "songs": related[i][:100],
+                "tags": tag_related[i][:10]
+            })
+
+        return answer
+    
+    if __name__ == "__main__":
+    fire.Fire(Recommend)
