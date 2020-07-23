@@ -155,3 +155,6 @@ class Recommend:
             })
 
         return answer
+    
+    if __name__ == "__main__":
+    fire.Fire(Recommend)
