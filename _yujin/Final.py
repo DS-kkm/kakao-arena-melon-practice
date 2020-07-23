@@ -9,7 +9,7 @@ from pandas.api.types import CategoricalDtype
 
 
 class Recommend:
-    def run(self, train_data, question_data):
+    def run(self):
 
         print("Loading train file...")
         train_data = pd.read_json('./arena_data/orig/train.json', encoding='utf-8')
@@ -23,7 +23,7 @@ class Recommend:
         print("Writing answers...")
         write_json(answers, 'results/results.json')
 
-    def related(self,question_data):
+    def related(self,train_data,question_data):
         id_songs = (
             train_data[['id', 'songs']]
            .explode('songs')
@@ -38,16 +38,10 @@ class Recommend:
                 .rename(columns={'id': 'user_id', 'tags': 'tag'})
         )
 
-        assert id_songs['user_id'].max() < 2147483647
-        assert id_songs['item_id'].max() < 2147483647
-        assert id_tags['user_id'].max() < 2147483647
-        assert id_tags['tag'].max() < 2147483647
-
         id_songs['user_id'] = id_songs['user_id'].astype(np.int32)
         id_songs['item_id'] = id_songs['item_id'].astype(np.int32)
         id_songs['value'] = id_songs['value'].astype(np.int8)
         id_tags['user_id'] = id_tags['user_id'].astype(np.int32)
-        id_tags['tag'] = id_tags['tag'].astype(np.int32)
         id_tags['value'] = id_tags['value'].astype(np.int8)
 
         while True:
@@ -134,27 +128,25 @@ class Recommend:
         set_question_tag = set(question_tag.user_id)
         ls_question_tag = list(set_question_tag)
 
-        related = []
-        for i in range(len(ls_question_item)):
-            for j in range(len(dic_item[ls_question_item[i]])):
-                rel = item_model.similar_items(dic_item[ls_question_item[i]][j])
-                related.append(rel)
+        related = {}
+        for i in tqdm(range(len(ls_question_item))):
+            user_rec = item_model.recommend(i, user_items, N=100)
+            related[i] = [rec[0] for rec in user_rec]
 
-        tag_related = []
-        for i in range(len(ls_question_tag)):
-            for j in range(len(dic_tag[ls_question_tag[i]])):
-                rel = tag_model.similar_items(dic_tag[ls_question_tag[i]][j])
-                related.append(rel)
+        tag_related = {}
+        for i in tqdm(range(len(ls_question_tag))):
+            tag_rec = tag_model.recommend(i, user_tags, N=100)
+            tag_related[i] = [rec[0] for rec in tag_rec]
 
-        answer = []
-        for i in range(len(ls_question_item)):
-            answer.append({
+        answer = {}
+        for i in tqdm(range(len(ls_question_item))):
+            answer[i] = {
                 "id": ls_question_item[i],
                 "songs": related[i][:100],
                 "tags": tag_related[i][:10]
-            })
+            }
 
         return answer
-    
-    if __name__ == "__main__":
+
+if __name__ == "__main__":
     fire.Fire(Recommend)
