@@ -10,6 +10,7 @@ from pandas.api.types import CategoricalDtype
 
 class Recommend:
     def run(self):
+        song_meta = pd.read_json('./res/song_meta.json')
 
         print("Loading train file...")
         train_data = pd.read_json('./arena_data/orig/train.json', encoding='utf-8')
@@ -89,6 +90,11 @@ class Recommend:
         tag_matrix = csr_matrix((id_tags["value"], (row_tag, col_tag)), \
                                 shape=(person_c_tag.categories.size, thing_c_tag.categories.size))
 
+        song_idx2id = {i: j for i, j in enumerate(thing_c_item.categories)}
+        song_id2idx = {j: i for i, j in enumerate(thing_c_item.categories)}
+        tag_idx2name = {i: j for i, j in enumerate(thing_c_tag.categories)}
+        tag_name2idx = {j: i for i, j in enumerate(thing_c_tag.categories)}
+
         import implicit
 
         # initialize a model
@@ -103,6 +109,12 @@ class Recommend:
         user_items = item_matrix.tocsr()
         user_tags = tag_matrix.tocsr()
 
+        # 인기곡
+        top200_songs = id_songs.groupby('item_id').value.sum().nlargest(200)
+        top200_tags = id_tags.groupby('tag').value.sum().nlargest(200)
+
+        question_ids = question_data.id.tolist()
+
         question_item = (
             question_data[['id', 'songs']]
             .explode('songs')
@@ -116,35 +128,64 @@ class Recommend:
             .rename(columns={'id': 'user_id', 'tags': 'tag'})
             )
 
-        dic_item = {}
+        # 각 플레이리스트에 대해
+        res = {}
         for idx, row in tqdm(question_data.iterrows(), total=len(question_data)):
-            dic_item[row.id] = row.songs
-        dic_tag = {}
+            cands = {}
+            # 각 곡 별로
+            for song in row.songs:
+                # 유사곡 100개 소환.
+                if song not in song_id2idx.keys(): continue  # val에는 train에 아예 없던 곡이 나올 수 있으므로 해당하면 재끼도록 설계
+                related = [(song_idx2id[r[0]], r[1]) for r in item_model.similar_items(song_id2idx[song], 100)]
+                for cand in related:
+                    # 추천된 아이템 : 유사도 리스트를 딕셔너리로 구현
+                    cands[cand[0]] = cands.get(cand[0], []) + [cand[1]]
+            # 한 곡이 여러번 추천될 땐 가장 높은 유사도 하나 채택
+            cands = {k: max(v) for k, v in cands.items()}
+            # 유사도 순으로 정렬 후, 기존 플레이리스트에 없는 곡들만 가지고 100개 뽑기
+            sorted_cands = [w for w in sorted(cands, key=cands.get, reverse=True) if w not in row.songs][:100]
+
+            # 가끔 미쳐가지고 비어있거나 한 경우도 있음. 이럴 땐 그냥 베스트를 넣어주자
+            if len(sorted_cands) < 100:
+                non_seen_top_200_songs = [song for song in top200_songs if song not in row.songs]
+                sorted_cands += non_seen_top_200_songs[:100 - len(sorted_cands)]
+
+            sorted_cands = [int(s) for s in sorted_cands]
+            res[row.id] = sorted_cands
+
+        # 각 플레이리스트에 대해
+        tag_rec = {}
         for idx, row in tqdm(question_data.iterrows(), total=len(question_data)):
-            dic_tag[row.id] = row.tags
+            cands = {}
+            # 각 태그 별로
+            for tag in row.tags:
+                # 유사곡 100개 소환.
+                if tag not in tag_name2idx.keys(): continue  # val에는 train에 아예 없던 곡이 나올 수 있으므로 해당하면 재끼도록 설계
+                related = [(tag_idx2name[r[0]], r[1]) for r in tag_model.similar_items(tag_name2idx[tag], 10)]
+                for cand in related:
+                    # 추천된 아이템 : 유사도 리스트를 딕셔너리로 구현
+                    cands[cand[0]] = cands.get(cand[0], []) + [cand[1]]
+            # 한 곡이 여러번 추천될 땐 가장 높은 유사도 하나 채택
+            cands = {k: max(v) for k, v in cands.items()}
+            # 유사도 순으로 정렬 후, 기존 플레이리스트에 없는 곳들만 가지고 100개 뽑기
+            sorted_cands = [w for w in sorted(cands, key=cands.get, reverse=True) if w not in row.tags][:10]
 
-        set_question_item = set(question_item.user_id)
-        ls_question_item = list(set_question_item)
-        set_question_tag = set(question_tag.user_id)
-        ls_question_tag = list(set_question_tag)
+            # 가끔 미쳐가지고 비어있거나 한 경우도 있음. 이럴 땐 그냥 베스트를 넣어주자
+            if len(sorted_cands) < 10:
+                non_seen_top_200_tags = [tag for tag in top200_tags.index if tag not in row.tags]
+                sorted_cands += non_seen_top_200_tags[:10 - len(sorted_cands)]
 
-        related = {}
-        for i in tqdm(range(len(ls_question_item))):
-            user_rec = item_model.recommend(i, user_items, N=100)
-            related[i] = [rec[0] for rec in user_rec]
+            assert len(sorted_cands) == 10
 
-        tag_related = {}
-        for i in tqdm(range(len(ls_question_tag))):
-            tag_rec = tag_model.recommend(i, user_tags, N=100)
-            tag_related[i] = [rec[0] for rec in tag_rec]
+            tag_rec[row.id] = sorted_cands
 
-        answer = {}
-        for i in tqdm(range(len(ls_question_item))):
-            answer[i] = {
-                "id": ls_question_item[i],
-                "songs": related[i][:100],
-                "tags": tag_related[i][:10]
-            }
+        answer = []
+        for _id, i, j in zip(question_ids, res, tag_rec):
+            answer.append({
+                "id": _id,
+                "songs": res[i][:100],
+                "tags": tag_rec[j][:10]
+            })
 
         return answer
 
