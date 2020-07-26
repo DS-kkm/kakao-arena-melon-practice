@@ -110,8 +110,8 @@ class Recommend:
         user_tags = tag_matrix.tocsr()
 
         # 인기곡
-        top200_songs = id_songs.groupby('item_id').value.sum().nlargest(200)
-        top200_tags = id_tags.groupby('tag').value.sum().nlargest(200)
+        top200_songs = id_songs.groupby('item_id').value.sum().nlargest(200).index
+        top200_tags = id_tags.groupby('tag').value.sum().nlargest(200).index
 
         question_ids = question_data.id.tolist()
 
@@ -147,7 +147,7 @@ class Recommend:
 
             # 가끔 미쳐가지고 비어있거나 한 경우도 있음. 이럴 땐 그냥 베스트를 넣어주자
             if len(sorted_cands) < 100:
-                non_seen_top_200_songs = [song for song in top200_songs if song not in row.songs]
+                non_seen_top_200_songs = [song for song in top200_songs if song not in row.songs+sorted_cands]
                 sorted_cands += non_seen_top_200_songs[:100 - len(sorted_cands)]
 
             sorted_cands = [int(s) for s in sorted_cands]
@@ -172,7 +172,7 @@ class Recommend:
 
             # 가끔 미쳐가지고 비어있거나 한 경우도 있음. 이럴 땐 그냥 베스트를 넣어주자
             if len(sorted_cands) < 10:
-                non_seen_top_200_tags = [tag for tag in top200_tags.index if tag not in row.tags]
+                non_seen_top_200_tags = [tag for tag in top200_tags.index if tag not in row.tags+sorted_cands]
                 sorted_cands += non_seen_top_200_tags[:10 - len(sorted_cands)]
 
             assert len(sorted_cands) == 10
