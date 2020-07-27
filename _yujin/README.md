@@ -2,6 +2,7 @@
 
 
 implicit 패키지를 이용해 recommend
+
 희소행렬(sparse matrix)를 csr_matrix 방식으로 구현
 
 
