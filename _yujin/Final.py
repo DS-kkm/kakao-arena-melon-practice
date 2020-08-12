@@ -145,7 +145,7 @@ class Recommend:
             # 유사도 순으로 정렬 후, 기존 플레이리스트에 없는 곡들만 가지고 100개 뽑기
             sorted_cands = [w for w in sorted(cands, key=cands.get, reverse=True) if w not in row.songs][:100]
 
-            # 가끔 미쳐가지고 비어있거나 한 경우도 있음. 이럴 땐 그냥 베스트를 넣어주자
+            # 비어있거나 한 경우 그냥 베스트를 넣어주자
             if len(sorted_cands) < 100:
                 non_seen_top_200_songs = [song for song in top200_songs if song not in row.songs+sorted_cands]
                 sorted_cands += non_seen_top_200_songs[:100 - len(sorted_cands)]
@@ -170,7 +170,7 @@ class Recommend:
             # 유사도 순으로 정렬 후, 기존 플레이리스트에 없는 곳들만 가지고 100개 뽑기
             sorted_cands = [w for w in sorted(cands, key=cands.get, reverse=True) if w not in row.tags][:10]
 
-            # 가끔 미쳐가지고 비어있거나 한 경우도 있음. 이럴 땐 그냥 베스트를 넣어주자
+            # 비어있거나 한 경우 그냥 베스트를 넣어주자
             if len(sorted_cands) < 10:
                 non_seen_top_200_tags = [tag for tag in top200_tags.index if tag not in row.tags+sorted_cands]
                 sorted_cands += non_seen_top_200_tags[:10 - len(sorted_cands)]
